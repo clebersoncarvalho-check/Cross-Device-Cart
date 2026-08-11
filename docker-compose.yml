@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    container_name: cross-device-cart
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: file:/data/db.sqlite
+    volumes:
+      - cross_device_cart_volume:/data
+    ports:
+      - "3007:3000"
+
+volumes:
+  cross_device_cart_volume:
+    external: true
