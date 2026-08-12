@@ -2,7 +2,7 @@
 
 client_id = "0393e5ceeda51109a77d21ad4e3bda02"
 name = "Cross Device Cart"
-application_url = "https://example.com"
+application_url = "https://cross-device-cart.fullcomm.app"
 embedded = true
 
 [access_scopes]
@@ -59,7 +59,10 @@ api_version = "2026-10"
   topics = [ "app/scopes_update" ]
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [
+  "https://cross-device-cart.fullcomm.app/auth/callback",
+  "https://cross-device-cart.fullcomm.app/auth/shopify/callback",
+]
 
 [build]
 automatically_update_urls_on_dev = true
