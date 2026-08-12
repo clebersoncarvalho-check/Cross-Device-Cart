@@ -1,0 +1,22 @@
+{% comment %}
+  Cross Device Cart — cole antes do cart-sync.js no layout/theme.liquid
+{% endcomment %}
+{% if customer %}
+  <script>
+    window.__cartSyncEnabled = true;
+    window.remoteCartData = {{ customer.metafields.app.dados_do_carrinho.value | default: nil | json }};
+    window.__cartSyncDebug = {
+      customerId: {{ customer.id | json }},
+      metafieldKey: "app.dados_do_carrinho",
+      hasValue: {% if customer.metafields.app.dados_do_carrinho.value != blank %}true{% else %}false{% endif %}
+    };
+  </script>
+{% else %}
+  <script>
+    window.__cartSyncEnabled = false;
+    window.remoteCartData = null;
+    window.__cartSyncDebug = null;
+  </script>
+{% endif %}
+
+<script src="{{ 'cart-sync.js' | asset_url }}" defer></script>

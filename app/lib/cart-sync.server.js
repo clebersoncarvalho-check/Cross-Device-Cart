@@ -221,19 +221,129 @@ export async function cartSyncAction({ request }) {
 
 export async function cartSyncLoader({ request }) {
   try {
-    await authenticate.public.appProxy(request);
+    let admin;
+    try {
+      ({ admin } = await authenticate.public.appProxy(request));
+    } catch (authError) {
+      console.error("[cart-sync] loader auth failed", authError);
+      return proxyJson(
+        cartSyncResponse({
+          ok: false,
+          code: CART_SYNC_CODES.PROXY_AUTH_FAILED,
+          step: "load_cart",
+        }),
+      );
+    }
 
     const url = new URL(request.url);
     const customerId = url.searchParams.get("logged_in_customer_id");
     const shop = url.searchParams.get("shop");
 
+    if (!customerId) {
+      return proxyJson(
+        cartSyncResponse({
+          ok: true,
+          code: CART_SYNC_CODES.HEALTH_OK,
+          step: "health_check",
+          loggedIn: false,
+          customerId: null,
+          cart: [],
+          items: [],
+          itemCount: 0,
+          shop,
+          endpoint: "/apps/cart-sync",
+          saveMethod: "POST",
+        }),
+      );
+    }
+
+    if (!admin) {
+      return proxyJson(
+        cartSyncResponse({
+          ok: false,
+          code: CART_SYNC_CODES.NO_ADMIN_SESSION,
+          step: "load_cart",
+          shop,
+        }),
+      );
+    }
+
+    let items = [];
+
+    try {
+      const response = await admin.graphql(
+        `#graphql
+          query CartSyncLoadMetafield($customerId: ID!) {
+            customer(id: $customerId) {
+              cartMetafield: metafield(namespace: "$app", key: "${METAFIELD_KEY}") {
+                jsonValue
+              }
+            }
+          }`,
+        {
+          variables: {
+            customerId: `gid://shopify/Customer/${customerId}`,
+          },
+        },
+      );
+
+      const json = await response.json();
+
+      if (json?.errors?.length) {
+        console.error("[cart-sync] load metafield GraphQL errors", json.errors);
+        return proxyJson(
+          cartSyncResponse({
+            ok: false,
+            code: CART_SYNC_CODES.ADMIN_API_ERROR,
+            step: "load_cart",
+            details: json.errors,
+            shop,
+          }),
+        );
+      }
+
+      items = parseStoredCartItems(json?.data?.customer?.cartMetafield?.jsonValue);
+    } catch (error) {
+      console.error("[cart-sync] load metafield failed", error);
+
+      if (isUnauthorizedAdminError(error)) {
+        return proxyJson(
+          cartSyncResponse({
+            ok: false,
+            code: CART_SYNC_CODES.ADMIN_TOKEN_EXPIRED,
+            step: "load_cart",
+            shop,
+          }),
+        );
+      }
+
+      return proxyJson(
+        cartSyncResponse({
+          ok: false,
+          code: CART_SYNC_CODES.ADMIN_API_ERROR,
+          step: "load_cart",
+          details: error instanceof Error ? error.message : String(error),
+          shop,
+        }),
+      );
+    }
+
+    console.info("[cart-sync] loaded", {
+      shop,
+      customerId,
+      itemCount: items.length,
+    });
+
     return proxyJson(
       cartSyncResponse({
         ok: true,
-        code: CART_SYNC_CODES.HEALTH_OK,
-        step: "health_check",
-        loggedIn: Boolean(customerId),
-        customerId: customerId || null,
+        code: CART_SYNC_CODES.CART_LOADED,
+        step: "load_cart",
+        loggedIn: true,
+        customerId,
+        cart: items,
+        items,
+        itemCount: items.length,
         shop,
         endpoint: "/apps/cart-sync",
         saveMethod: "POST",
@@ -244,12 +354,21 @@ export async function cartSyncLoader({ request }) {
     return proxyJson(
       cartSyncResponse({
         ok: false,
-        code: CART_SYNC_CODES.PROXY_AUTH_FAILED,
-        step: "health_check",
+        code: CART_SYNC_CODES.UNEXPECTED_ERROR,
+        step: "load_cart",
         details: error instanceof Error ? error.message : String(error),
       }),
     );
   }
+}
+
+function parseStoredCartItems(rawItems) {
+  if (rawItems == null) {
+    return [];
+  }
+
+  const items = normalizeItems(rawItems);
+  return items ?? [];
 }
 
 function normalizeItems(rawItems) {

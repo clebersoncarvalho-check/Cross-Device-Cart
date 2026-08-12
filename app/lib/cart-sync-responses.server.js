@@ -11,6 +11,7 @@ export const CART_SYNC_CODES = {
   METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
   UNEXPECTED_ERROR: "UNEXPECTED_ERROR",
   HEALTH_OK: "HEALTH_OK",
+  CART_LOADED: "CART_LOADED",
 };
 
 const MESSAGES = {
@@ -33,6 +34,7 @@ const MESSAGES = {
   [CART_SYNC_CODES.METHOD_NOT_ALLOWED]: "Use POST para salvar o carrinho.",
   [CART_SYNC_CODES.UNEXPECTED_ERROR]: "Erro inesperado no servidor.",
   [CART_SYNC_CODES.HEALTH_OK]: "App Proxy respondendo.",
+  [CART_SYNC_CODES.CART_LOADED]: "Carrinho carregado do metafield do cliente.",
 };
 
 const HINTS = {

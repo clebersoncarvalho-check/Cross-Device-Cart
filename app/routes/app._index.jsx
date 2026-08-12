@@ -110,6 +110,7 @@ Metafield:        customer.metafields.${metafieldKey}`}</code>
         >
           <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
             <code>{`SUCCESS              → Carrinho salvo
+CART_LOADED            → Carrinho lido (GET)
 NOT_LOGGED_IN        → Cliente não logado na vitrine
 NO_ADMIN_SESSION     → Abrir app no Admin
 ADMIN_TOKEN_EXPIRED  → Reinstalar app / limpar Session
