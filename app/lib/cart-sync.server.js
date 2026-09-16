@@ -85,6 +85,21 @@ export async function cartSyncAction({ request }) {
       );
     }
 
+    if (items.length === 0 && body?.clear !== true) {
+      return proxyJson(
+        cartSyncResponse({
+          ok: true,
+          code: CART_SYNC_CODES.EMPTY_SAVE_SKIPPED,
+          step: "skip_empty_save",
+          skipped: true,
+          customerId,
+          itemCount: 0,
+          items,
+          shop,
+        }),
+      );
+    }
+
     const ownerId = `gid://shopify/Customer/${customerId}`;
     const value = JSON.stringify(items);
 
@@ -479,7 +494,7 @@ export async function getCartSyncAdminStatus(admin, session) {
       checks.metafieldDefinition = {
         ok: false,
         message:
-          "Definição app.dados_do_carrinho não encontrada — rode npm run deploy e reinstale",
+          "Definição $app.dados_do_carrinho não encontrada — rode npm run deploy e reinstale",
       };
     }
   } catch (error) {

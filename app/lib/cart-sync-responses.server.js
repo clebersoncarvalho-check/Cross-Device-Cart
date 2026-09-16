@@ -12,6 +12,7 @@ export const CART_SYNC_CODES = {
   UNEXPECTED_ERROR: "UNEXPECTED_ERROR",
   HEALTH_OK: "HEALTH_OK",
   CART_LOADED: "CART_LOADED",
+  EMPTY_SAVE_SKIPPED: "EMPTY_SAVE_SKIPPED",
 };
 
 const MESSAGES = {
@@ -35,6 +36,8 @@ const MESSAGES = {
   [CART_SYNC_CODES.UNEXPECTED_ERROR]: "Erro inesperado no servidor.",
   [CART_SYNC_CODES.HEALTH_OK]: "App Proxy respondendo.",
   [CART_SYNC_CODES.CART_LOADED]: "Carrinho carregado do metafield do cliente.",
+  [CART_SYNC_CODES.EMPTY_SAVE_SKIPPED]:
+    "Save vazio ignorado. Envie clear: true para apagar o metafield.",
 };
 
 const HINTS = {

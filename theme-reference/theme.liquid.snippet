@@ -1,21 +1,27 @@
 {% comment %}
-  Cross Device Cart — cole antes do cart-sync.js no layout/theme.liquid
+  Cross Device Cart — cole no <head> do layout/theme.liquid (cedo).
+  O GET do app começa aqui; o JS só consome o resultado.
 {% endcomment %}
 {% if customer %}
+  <style>
+    .madesa-header-desktop.section.shopify-section {
+      background: darkgreen !important;
+    }
+  </style>
   <script>
     window.__cartSyncEnabled = true;
-    window.remoteCartData = {{ customer.metafields.app.dados_do_carrinho.value | default: nil | json }};
-    window.__cartSyncDebug = {
-      customerId: {{ customer.id | json }},
-      metafieldKey: "app.dados_do_carrinho",
-      hasValue: {% if customer.metafields.app.dados_do_carrinho.value != blank %}true{% else %}false{% endif %}
-    };
+    window.__cartSyncCustomerId = {{ customer.id | json }};
+    window.__cartSyncPrefetch = fetch('/apps/cart-sync', {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' }
+    }).then(function (r) {
+      return r.json();
+    });
   </script>
 {% else %}
   <script>
     window.__cartSyncEnabled = false;
-    window.remoteCartData = null;
-    window.__cartSyncDebug = null;
+    window.__cartSyncCustomerId = null;
   </script>
 {% endif %}
 

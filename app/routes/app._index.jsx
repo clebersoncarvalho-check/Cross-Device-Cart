@@ -10,12 +10,11 @@ export const loader = async ({ request }) => {
   return {
     status,
     proxyUrl: "/apps/cart-sync",
-    metafieldKey: "app.dados_do_carrinho",
   };
 };
 
 export default function Index() {
-  const { status, proxyUrl, metafieldKey } = useLoaderData();
+  const { status, proxyUrl } = useLoaderData();
   const fetcher = useFetcher();
   const isRefreshing = fetcher.state !== "idle";
 
@@ -75,13 +74,14 @@ export default function Index() {
             <s-text type="strong">{proxyUrl.replace("/", "")}</s-text>
           </s-list-item>
           <s-list-item>
-            A request POST deve retornar JSON com{" "}
+            POST deve retornar{" "}
             <s-text type="strong">ok: true</s-text> e code{" "}
             <s-text type="strong">SUCCESS</s-text>.
           </s-list-item>
           <s-list-item>
-            No Console do browser:{" "}
-            <s-text type="strong">[cart-sync] ✅ Carrinho salvo</s-text>
+            No outro device (ou anônimo), mesmo login: GET com{" "}
+            <s-text type="strong">CART_LOADED</s-text> e os itens, depois o
+            tema chama /cart/add.js.
           </s-list-item>
         </s-unordered-list>
       </s-section>
@@ -94,9 +94,9 @@ export default function Index() {
           background="subdued"
         >
           <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
-            <code>{`Vitrine (tema):  POST ${proxyUrl}
-Health check:     GET  ${proxyUrl}
-Metafield:        customer.metafields.${metafieldKey}`}</code>
+            <code>{`Salvar:     POST ${proxyUrl}  { items, clear }
+Restaurar:  GET  ${proxyUrl}  (o tema não lê o metafield)
+Metafield:  $app.dados_do_carrinho`}</code>
           </pre>
         </s-box>
       </s-section>
@@ -110,12 +110,13 @@ Metafield:        customer.metafields.${metafieldKey}`}</code>
         >
           <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
             <code>{`SUCCESS              → Carrinho salvo
-CART_LOADED            → Carrinho lido (GET)
+CART_LOADED          → Carrinho lido (GET)
+EMPTY_SAVE_SKIPPED   → POST vazio sem clear: true (não apaga)
 NOT_LOGGED_IN        → Cliente não logado na vitrine
 NO_ADMIN_SESSION     → Abrir app no Admin
 ADMIN_TOKEN_EXPIRED  → Reinstalar app / limpar Session
 PROXY_AUTH_FAILED    → Credenciais ou proxy incorretos
-METAFIELD_ERROR      → Definição app.dados_do_carrinho ausente
+METAFIELD_ERROR      → Definição $app.dados_do_carrinho ausente
 INVALID_ITEMS        → Body JSON inválido`}</code>
           </pre>
         </s-box>
