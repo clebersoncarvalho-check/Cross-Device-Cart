@@ -40,7 +40,6 @@
       sessionStorage.removeItem(SESSION_CUSTOMER_KEY);
       sessionStorage.removeItem(LEGACY_RESTORE_KEY);
     } catch (e) {
-      /* sessionStorage pode falhar em iframe restrito */
     }
   }
 
@@ -49,7 +48,6 @@
       sessionStorage.setItem(SESSION_CUSTOMER_KEY, customerId);
       sessionStorage.removeItem(LEGACY_RESTORE_KEY);
     } catch (e) {
-      /* ignore */
     }
   }
 
@@ -244,7 +242,6 @@
 
       if (data.ok) lastSavedJson = payload;
     } catch (err) {
-      /* ignore */
     } finally {
       saveInFlight = false;
       if (pendingSave) {
@@ -373,7 +370,6 @@
       lastSavedJson = JSON.stringify({ items: remote, clear: false });
       markRestored(customerId);
     } catch (err) {
-      /* ignore */
     } finally {
       restoreInFlight = false;
       if (pendingSave) {
