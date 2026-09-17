@@ -10,9 +10,32 @@ export const METAFIELD_NAMESPACE = "$app";
 export const METAFIELD_KEY = "dados_do_carrinho";
 export const METAFIELD_TYPE = "json";
 
+function logInfo(message, extra) {
+  if (extra === undefined) {
+    console.info("[cart-sync]", message);
+    return;
+  }
+  console.info("[cart-sync]", message, extra);
+}
+
+function logError(message, extra) {
+  if (extra === undefined) {
+    console.error("[cart-sync]", message);
+    return;
+  }
+  console.error("[cart-sync]", message, extra);
+}
+
+function errorText(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function cartSyncAction({ request }) {
   try {
     if (request.method !== "POST") {
+      logError("Método não permitido no save. Use POST.", {
+        method: request.method,
+      });
       return proxyJson(
         cartSyncResponse({
           ok: false,
@@ -26,7 +49,9 @@ export async function cartSyncAction({ request }) {
     try {
       ({ admin } = await authenticate.public.appProxy(request));
     } catch (authError) {
-      console.error("[cart-sync] proxy auth failed", authError);
+      logError("Falha na autenticação do App Proxy no save.", {
+        erro: errorText(authError),
+      });
       return proxyJson(
         cartSyncResponse({
           ok: false,
@@ -37,6 +62,9 @@ export async function cartSyncAction({ request }) {
     }
 
     if (!admin) {
+      logError(
+        "Save recusado: sem sessão Admin. Abra o app no Admin da loja.",
+      );
       return proxyJson(
         cartSyncResponse({
           ok: false,
@@ -50,7 +78,10 @@ export async function cartSyncAction({ request }) {
     const customerId = url.searchParams.get("logged_in_customer_id");
     const shop = url.searchParams.get("shop");
 
+    logInfo("POST recebido para salvar carrinho.", { shop, customerId });
+
     if (!customerId) {
+      logError("Save recusado: cliente não está logado na vitrine.", { shop });
       return proxyJson(
         cartSyncResponse({
           ok: false,
@@ -65,6 +96,10 @@ export async function cartSyncAction({ request }) {
     try {
       body = await request.json();
     } catch {
+      logError("Save recusado: body do POST não é um JSON válido.", {
+        shop,
+        customerId,
+      });
       return proxyJson(
         cartSyncResponse({
           ok: false,
@@ -76,6 +111,11 @@ export async function cartSyncAction({ request }) {
 
     const items = normalizeItems(body?.items);
     if (items === null) {
+      logError("Save recusado: lista de itens inválida.", {
+        shop,
+        customerId,
+        itemsRecebidos: body?.items,
+      });
       return proxyJson(
         cartSyncResponse({
           ok: false,
@@ -86,6 +126,10 @@ export async function cartSyncAction({ request }) {
     }
 
     if (items.length === 0 && body?.clear !== true) {
+      logInfo("Save vazio ignorado. Metafield não foi apagado.", {
+        shop,
+        customerId,
+      });
       return proxyJson(
         cartSyncResponse({
           ok: true,
@@ -102,6 +146,14 @@ export async function cartSyncAction({ request }) {
 
     const ownerId = `gid://shopify/Customer/${customerId}`;
     const value = JSON.stringify(items);
+
+    logInfo("Gravando carrinho no metafield do cliente.", {
+      shop,
+      customerId,
+      itemCount: items.length,
+      items,
+      clear: items.length === 0,
+    });
 
     let response;
     try {
@@ -137,9 +189,12 @@ export async function cartSyncAction({ request }) {
         },
       );
     } catch (graphqlError) {
-      console.error("[cart-sync] metafieldsSet request failed", graphqlError);
-
       if (isUnauthorizedAdminError(graphqlError)) {
+        logError("Token Admin expirado ou inválido ao gravar o metafield.", {
+          shop,
+          customerId,
+          erro: errorText(graphqlError),
+        });
         return proxyJson(
           cartSyncResponse({
             ok: false,
@@ -150,6 +205,11 @@ export async function cartSyncAction({ request }) {
         );
       }
 
+      logError("Falha na requisição para gravar o metafield.", {
+        shop,
+        customerId,
+        erro: errorText(graphqlError),
+      });
       return proxyJson(
         cartSyncResponse({
           ok: false,
@@ -168,7 +228,11 @@ export async function cartSyncAction({ request }) {
     const userErrors = json?.data?.metafieldsSet?.userErrors ?? [];
 
     if (userErrors.length > 0) {
-      console.error("[cart-sync] metafieldsSet userErrors", userErrors);
+      logError("Shopify recusou a gravação do metafield.", {
+        shop,
+        customerId,
+        userErrors,
+      });
       return proxyJson(
         cartSyncResponse({
           ok: false,
@@ -181,7 +245,11 @@ export async function cartSyncAction({ request }) {
     }
 
     if (json?.errors?.length) {
-      console.error("[cart-sync] metafieldsSet GraphQL errors", json.errors);
+      logError("Erro GraphQL ao gravar o metafield.", {
+        shop,
+        customerId,
+        errors: json.errors,
+      });
       return proxyJson(
         cartSyncResponse({
           ok: false,
@@ -193,10 +261,11 @@ export async function cartSyncAction({ request }) {
       );
     }
 
-    console.info("[cart-sync] saved", {
+    logInfo("Carrinho salvo no metafield.", {
       shop,
       customerId,
       itemCount: items.length,
+      items,
     });
 
     return proxyJson(
@@ -211,7 +280,7 @@ export async function cartSyncAction({ request }) {
       }),
     );
   } catch (error) {
-    console.error("[cart-sync] unexpected error", error);
+    logError("Erro inesperado no POST de save.", { erro: errorText(error) });
 
     if (isUnauthorizedAdminError(error)) {
       return proxyJson(
@@ -240,7 +309,9 @@ export async function cartSyncLoader({ request }) {
     try {
       ({ admin } = await authenticate.public.appProxy(request));
     } catch (authError) {
-      console.error("[cart-sync] loader auth failed", authError);
+      logError("Falha na autenticação do App Proxy no GET.", {
+        erro: errorText(authError),
+      });
       return proxyJson(
         cartSyncResponse({
           ok: false,
@@ -254,7 +325,10 @@ export async function cartSyncLoader({ request }) {
     const customerId = url.searchParams.get("logged_in_customer_id");
     const shop = url.searchParams.get("shop");
 
+    logInfo("GET recebido para carregar carrinho.", { shop, customerId });
+
     if (!customerId) {
+      logInfo("GET sem cliente logado. Respondendo health check.", { shop });
       return proxyJson(
         cartSyncResponse({
           ok: true,
@@ -273,6 +347,10 @@ export async function cartSyncLoader({ request }) {
     }
 
     if (!admin) {
+      logError(
+        "GET recusado: sem sessão Admin. Abra o app no Admin da loja.",
+        { shop, customerId },
+      );
       return proxyJson(
         cartSyncResponse({
           ok: false,
@@ -284,6 +362,8 @@ export async function cartSyncLoader({ request }) {
     }
 
     let items = [];
+
+    logInfo("Lendo metafield do carrinho do cliente.", { shop, customerId });
 
     try {
       const response = await admin.graphql(
@@ -305,7 +385,11 @@ export async function cartSyncLoader({ request }) {
       const json = await response.json();
 
       if (json?.errors?.length) {
-        console.error("[cart-sync] load metafield GraphQL errors", json.errors);
+        logError("Erro GraphQL ao ler o metafield do carrinho.", {
+          shop,
+          customerId,
+          errors: json.errors,
+        });
         return proxyJson(
           cartSyncResponse({
             ok: false,
@@ -317,11 +401,16 @@ export async function cartSyncLoader({ request }) {
         );
       }
 
-      items = parseStoredCartItems(json?.data?.customer?.cartMetafield?.jsonValue);
+      items = parseStoredCartItems(
+        json?.data?.customer?.cartMetafield?.jsonValue,
+      );
     } catch (error) {
-      console.error("[cart-sync] load metafield failed", error);
-
       if (isUnauthorizedAdminError(error)) {
+        logError("Token Admin expirado ou inválido ao ler o metafield.", {
+          shop,
+          customerId,
+          erro: errorText(error),
+        });
         return proxyJson(
           cartSyncResponse({
             ok: false,
@@ -332,6 +421,11 @@ export async function cartSyncLoader({ request }) {
         );
       }
 
+      logError("Falha ao ler o metafield do carrinho.", {
+        shop,
+        customerId,
+        erro: errorText(error),
+      });
       return proxyJson(
         cartSyncResponse({
           ok: false,
@@ -343,11 +437,19 @@ export async function cartSyncLoader({ request }) {
       );
     }
 
-    console.info("[cart-sync] loaded", {
-      shop,
-      customerId,
-      itemCount: items.length,
-    });
+    if (items.length === 0) {
+      logInfo("Metafield vazio. Nenhum item para restaurar.", {
+        shop,
+        customerId,
+      });
+    } else {
+      logInfo("Carrinho carregado do metafield.", {
+        shop,
+        customerId,
+        itemCount: items.length,
+        items,
+      });
+    }
 
     return proxyJson(
       cartSyncResponse({
@@ -365,7 +467,7 @@ export async function cartSyncLoader({ request }) {
       }),
     );
   } catch (error) {
-    console.error("[cart-sync] loader error", error);
+    logError("Erro inesperado no GET de load.", { erro: errorText(error) });
     return proxyJson(
       cartSyncResponse({
         ok: false,
@@ -383,7 +485,11 @@ function parseStoredCartItems(rawItems) {
   }
 
   const items = normalizeItems(rawItems);
-  return items ?? [];
+  if (items === null) {
+    logError("Metafield do carrinho com formato inválido.", { rawItems });
+    return [];
+  }
+  return items;
 }
 
 function normalizeItems(rawItems) {

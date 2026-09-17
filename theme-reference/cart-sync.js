@@ -1,6 +1,5 @@
 /**
  * Cross Device Cart
- * Network: filtre "cart-sync"  |  POST = salvar  |  GET = buscar no app
  */
 (function () {
   const CART_SYNC_URL = '/apps/cart-sync';
@@ -8,7 +7,6 @@
   const MIN_VARIANT_ID = 1000000000;
   const SESSION_CUSTOMER_KEY = 'cartSyncCustomerId';
   const LEGACY_RESTORE_KEY = 'cartSyncRestored';
-  const DEBUG = true;
 
   const nativeFetch = window.fetch.bind(window);
 
@@ -19,19 +17,6 @@
   let pendingSaveOptions = null;
   let lastSavedJson = '';
   let interceptInstalled = false;
-
-  function logOk(msg, data) {
-    console.log('[cart-sync] ✅ ' + msg, data !== undefined ? data : '');
-  }
-  function logWarn(msg, data) {
-    console.warn('[cart-sync] ❌ ' + msg, data !== undefined ? data : '');
-  }
-  function logInfo(msg, data) {
-    if (DEBUG) console.log('[cart-sync] ℹ️ ' + msg, data !== undefined ? data : '');
-  }
-  function logError(msg, err) {
-    console.error('[cart-sync] 🔴 ' + msg, err);
-  }
 
   function formatResponse(data) {
     if (!data || typeof data !== 'object') return String(data);
@@ -125,7 +110,6 @@
       try {
         return parseRemoteRaw(JSON.parse(raw));
       } catch (e) {
-        logWarn('JSON inválido no app', raw);
         return [];
       }
     }
@@ -136,23 +120,13 @@
   }
 
   function normalizeRemoteItems(rawList) {
-    var parsed = parseRemoteRaw(rawList);
-    var items = parsed
+    return parseRemoteRaw(rawList)
       .map(function (item) {
         return { id: Number(item.id || item.variant_id), quantity: Number(item.quantity) };
       })
       .filter(function (item) {
         return isValidVariantId(item.id) && Number.isFinite(item.quantity) && item.quantity > 0;
       });
-
-    var dropped = parsed.length - items.length;
-    if (dropped > 0) {
-      logWarn('Itens inválidos ignorados (use variant_id)', {
-        dropped: dropped,
-        kept: items,
-      });
-    }
-    return items;
   }
 
   function itemsFromAppPayload(data) {
@@ -169,38 +143,21 @@
     window.__cartSyncPrefetch = null;
 
     if (prefetch) {
-      logInfo('GET ' + CART_SYNC_URL + ' (prefetch do head)');
-      var prefetched = await prefetch;
-      logInfo('Resposta GET prefetch', prefetched);
-      return itemsFromAppPayload(prefetched);
+      return itemsFromAppPayload(await prefetch);
     }
 
-    logInfo('GET ' + CART_SYNC_URL);
     var res = await nativeFetch(CART_SYNC_URL, {
       method: 'GET',
       credentials: 'same-origin',
       headers: { Accept: 'application/json' },
     });
     var text = await res.text();
-    logInfo('Resposta GET', { status: res.status, bodyPreview: text.slice(0, 500) });
     if (!res.ok) throw new Error('GET ' + res.status + ': ' + text);
     return itemsFromAppPayload(JSON.parse(text));
   }
 
   async function loadRemoteCartData() {
-    logInfo('Buscando carrinho no app', { customerId: getCustomerId() });
-    try {
-      var fromApp = normalizeRemoteItems(await fetchRemoteCartFromApp());
-      if (fromApp.length > 0) {
-        logOk('Carrinho via GET', fromApp);
-        return fromApp;
-      }
-      logInfo('GET sem itens válidos');
-    } catch (err) {
-      logError('Falha GET', err);
-      throw err;
-    }
-    return [];
+    return normalizeRemoteItems(await fetchRemoteCartFromApp());
   }
 
   async function getLocalCartItemsStable() {
@@ -243,18 +200,13 @@
     var skipEmpty = options && options.skipEmpty;
     var immediate = options && options.immediate;
     var keepalive = options && options.keepalive;
-    if (!isLoggedIn()) {
-      logInfo('Save ignorado — não logado');
-      return;
-    }
+    if (!isLoggedIn()) return;
     if (restoreInFlight) {
       queuePendingSave(options);
-      logInfo('Save adiado — restore em andamento');
       return;
     }
     if (saveInFlight) {
       queuePendingSave(options);
-      logInfo('Save na fila — outro save em andamento');
       return;
     }
 
@@ -266,27 +218,14 @@
       var items = immediate
         ? await getLocalCartItemsOnce(keepalive)
         : await getLocalCartItemsStable();
-      if (skipEmpty && items.length === 0) {
-        logInfo('Save vazio ignorado (visibility/logout)');
-        return;
-      }
+      if (skipEmpty && items.length === 0) return;
 
       var payload = JSON.stringify({
         items: items,
         clear: items.length === 0,
       });
 
-      if (payload === lastSavedJson) {
-        logInfo('Save ignorado — igual ao último', items);
-        return;
-      }
-
-      logInfo('POST /apps/cart-sync', {
-        itemCount: items.length,
-        items: items,
-        immediate: Boolean(immediate),
-        keepalive: Boolean(keepalive),
-      });
+      if (payload === lastSavedJson) return;
 
       var res = await nativeFetch(CART_SYNC_URL, {
         method: 'POST',
@@ -300,25 +239,18 @@
       try {
         data = JSON.parse(text);
       } catch (e) {
-        logWarn('POST não retornou JSON', { status: res.status, body: text });
         return;
       }
 
-      if (data.ok) {
-        lastSavedJson = payload;
-        logOk(data.skipped ? 'Save vazio ignorado pelo app' : 'Salvo no app', data);
-      } else {
-        logWarn(formatResponse(data), data);
-      }
+      if (data.ok) lastSavedJson = payload;
     } catch (err) {
-      logError('Erro no save', err);
+      /* ignore */
     } finally {
       saveInFlight = false;
       if (pendingSave) {
         var nextOptions = pendingSaveOptions;
         pendingSave = false;
         pendingSaveOptions = null;
-        logInfo('Rodando save que estava na fila');
         saveCartToAccount(nextOptions || undefined);
       }
     }
@@ -327,7 +259,6 @@
   function saveAfterCartAdd() {
     if (!isLoggedIn() || restoreInFlight) return;
     clearTimeout(saveTimer);
-    logInfo('Save imediato após /cart/add');
     saveCartToAccount({ immediate: true, keepalive: true });
   }
 
@@ -365,10 +296,8 @@
     }
     if (restoreInFlight) {
       pendingSave = true;
-      logInfo('Save adiado', { source: source });
       return;
     }
-    logInfo('Save agendado', { source: source, delayMs: SAVE_DEBOUNCE_MS });
     clearTimeout(saveTimer);
     saveTimer = setTimeout(function () {
       saveCartToAccount();
@@ -376,7 +305,6 @@
   }
 
   async function addItemsToCart(items) {
-    logInfo('POST /cart/add.js', items);
     var res = await nativeFetch('/cart/add.js', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -393,9 +321,7 @@
       throw new Error(data.description || data.message || 'Falha ao adicionar');
     }
     if (typeof window.refreshCart === 'function') {
-      Promise.resolve(window.refreshCart(null, { openMinicart: false })).catch(function (err) {
-        logWarn('refreshCart falhou depois do restore', err);
-      });
+      Promise.resolve(window.refreshCart(null, { openMinicart: false })).catch(function () {});
     } else {
       document.dispatchEvent(new CustomEvent('cart:refresh', { detail: { source: 'cart-sync' } }));
       document.dispatchEvent(new CustomEvent('cart:updated', { detail: { source: 'cart-sync' } }));
@@ -406,15 +332,11 @@
   async function rebuildCart() {
     if (!isLoggedIn()) {
       clearRestoreSession();
-      logInfo('Restore ignorado — não logado (sessão de restore limpa)');
       return;
     }
 
     var customerId = getCustomerId();
-    if (alreadyRestoredFor(customerId)) {
-      logInfo('Restore já rodou neste login — pulando', { customerId: customerId });
-      return;
-    }
+    if (alreadyRestoredFor(customerId)) return;
 
     restoreInFlight = true;
 
@@ -424,43 +346,34 @@
       });
       var remote = await loadRemoteCartData();
       if (remote.length === 0) {
-        logInfo('Nada válido para restaurar (não limpa o carrinho)');
         markRestored(customerId);
         return;
       }
 
       var local = await localPromise;
       var localItems = mapCartItems(local);
-      logInfo('Local antes restore', { item_count: local.item_count, items: localItems });
 
       if (JSON.stringify(localItems) === JSON.stringify(remote)) {
-        logOk('Carrinho local já igual ao app');
         lastSavedJson = JSON.stringify({ items: remote, clear: false });
         markRestored(customerId);
         return;
       }
 
       if (local.item_count > 0) {
-        logInfo('Limpando carrinho local antes do restore');
         var clearRes = await nativeFetch('/cart/clear.js', { method: 'POST' });
-        if (!clearRes.ok) {
-          logWarn('Falha ao limpar — aborta restore para não perder itens', await clearRes.text());
-          return;
-        }
+        if (!clearRes.ok) return;
       }
 
       try {
         await addItemsToCart(remote);
       } catch (addErr) {
-        logError('Restore falhou no add (id inválido?). Carrinho pode ter sido limpo.', addErr);
         return;
       }
 
       lastSavedJson = JSON.stringify({ items: remote, clear: false });
       markRestored(customerId);
-      logOk('Restore concluído', remote);
     } catch (err) {
-      logError('Erro no restore', err);
+      /* ignore */
     } finally {
       restoreInFlight = false;
       if (pendingSave) {
@@ -481,22 +394,8 @@
     });
   }
 
-  logInfo('Inicializado', {
-    enabled: window.__cartSyncEnabled,
-    customerId: getCustomerId(),
-  });
   bindCartSaveEvents();
   rebuildCart();
-
-  document.addEventListener(
-    'click',
-    function (e) {
-      if (e.target.closest('madesa-buy-now')) {
-        logInfo('Clique Comprar agora (save sai no /cart/add.js)');
-      }
-    },
-    true
-  );
 
   document.addEventListener('click', function (e) {
     if (
