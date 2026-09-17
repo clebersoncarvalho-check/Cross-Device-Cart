@@ -3,11 +3,6 @@
   O GET do app começa aqui; o JS só consome o resultado.
 {% endcomment %}
 {% if customer %}
-  <style>
-    .madesa-header-desktop.section.shopify-section {
-      background: darkgreen !important;
-    }
-  </style>
   <script>
     window.__cartSyncEnabled = true;
     window.__cartSyncCustomerId = {{ customer.id | json }};
